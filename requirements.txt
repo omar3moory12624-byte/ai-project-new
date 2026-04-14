@@ -2,4 +2,5 @@ fastapi
 uvicorn
 numpy
 scikit-learn
-openai
+sentence-transformers
+torch
