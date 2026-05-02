@@ -6,14 +6,13 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 app = FastAPI(title="Graduation Project Recommendation API")
 
-# تحميل الموديل مرة واحدة فقط
 model = None
 
 def get_model():
     global model
     if model is None:
         print("Loading model...")
-        model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+        model = SentenceTransformer("paraphrase-MiniLM-L3-v2")  # أخف موديل
     return model
 
 RECOMMEND_THRESHOLD = 0.55
@@ -37,9 +36,13 @@ def check_duplication(request: ProjectRequest):
     model = get_model()
 
     try:
-        user_embedding = model.encode([request.problem])
+        user_embedding = model.encode(
+            [request.problem],
+            batch_size=1,
+            convert_to_numpy=True
+        )
     except Exception as e:
-        return {"error": f"Model error: {str(e)}"}
+        return {"error": str(e)}
 
     if not request.previousIdeas:
         return {
@@ -49,9 +52,13 @@ def check_duplication(request: ProjectRequest):
         }
 
     try:
-        previous_embeddings = model.encode(request.previousIdeas)
+        previous_embeddings = model.encode(
+            request.previousIdeas[:10],  # limit عشان الرام
+            batch_size=1,
+            convert_to_numpy=True
+        )
     except Exception as e:
-        return {"error": f"Encoding error: {str(e)}"}
+        return {"error": str(e)}
 
     similarities = cosine_similarity(
         user_embedding,
