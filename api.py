@@ -1,7 +1,6 @@
 import numpy as np
 from fastapi import FastAPI
 from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
 app = FastAPI(title="Graduation Project Recommendation API")
@@ -11,8 +10,9 @@ model = None
 def get_model():
     global model
     if model is None:
+        from sentence_transformers import SentenceTransformer  # 👈 مهم هنا
         print("Loading model...")
-        model = SentenceTransformer("paraphrase-MiniLM-L3-v2")  # أخف موديل
+        model = SentenceTransformer("paraphrase-MiniLM-L3-v2")
     return model
 
 RECOMMEND_THRESHOLD = 0.55
@@ -35,35 +35,28 @@ def check_duplication(request: ProjectRequest):
 
     model = get_model()
 
-    try:
-        user_embedding = model.encode(
-            [request.problem],
-            batch_size=1,
-            convert_to_numpy=True
-        )
-    except Exception as e:
-        return {"error": str(e)}
+    user_embedding = model.encode(
+        [request.problem],
+        batch_size=1,
+        convert_to_numpy=True
+    )
 
-    if not request.previousIdeas:
+    previous = request.previousIdeas[:10]
+
+    if not previous:
         return {
             "recommendations": [],
             "status": "accepted",
             "duplicates": []
         }
 
-    try:
-        previous_embeddings = model.encode(
-            request.previousIdeas[:10],  # limit عشان الرام
-            batch_size=1,
-            convert_to_numpy=True
-        )
-    except Exception as e:
-        return {"error": str(e)}
+    previous_embeddings = model.encode(
+        previous,
+        batch_size=1,
+        convert_to_numpy=True
+    )
 
-    similarities = cosine_similarity(
-        user_embedding,
-        previous_embeddings
-    )[0]
+    similarities = cosine_similarity(user_embedding, previous_embeddings)[0]
 
     top_indices = np.argsort(similarities)[::-1][:TOP_K_RECOMMEND]
 
@@ -72,10 +65,9 @@ def check_duplication(request: ProjectRequest):
 
     for idx in top_indices:
         score = float(similarities[idx])
-        idea_text = request.previousIdeas[idx]
 
         item = {
-            "idea": idea_text,
+            "idea": previous[idx],
             "similarity_percentage": round(score * 100, 2)
         }
 
@@ -84,10 +76,8 @@ def check_duplication(request: ProjectRequest):
         if score >= DUPLICATION_THRESHOLD:
             duplicates.append(item)
 
-    status = "rejected" if duplicates else "accepted"
-
     return {
         "recommendations": recommendations,
-        "status": status,
+        "status": "rejected" if duplicates else "accepted",
         "duplicates": duplicates
     }
