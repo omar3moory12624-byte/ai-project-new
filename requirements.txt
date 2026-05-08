@@ -1,6 +1,5 @@
-fastapi
-uvicorn
-numpy
-scikit-learn
 sentence-transformers
 torch
+scikit-learn
+fastapi
+uvicorn

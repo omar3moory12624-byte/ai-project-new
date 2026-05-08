@@ -1,93 +1,67 @@
 import numpy as np
-import re
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List
+from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.feature_extraction.text import TfidfVectorizer
 
 app = FastAPI(title="Graduation Project Recommendation API")
 
 # ==============================
-# Models
+# Model
+# ==============================
+model = SentenceTransformer("all-MiniLM-L6-v2")
+
+# ==============================
+# Request Models
 # ==============================
 class ProjectItem(BaseModel):
     id: str
-    description: str   # ✅ بدل abstract
+    description: str   # 👈 نفس اسم الباك
 
 class ProjectRequest(BaseModel):
     problem: str
     projects: List[ProjectItem]
 
 # ==============================
-# Text Cleaning
-# ==============================
-def clean_text(text):
-    text = text.lower()
-    text = re.sub(r'[^\w\s]', '', text)
-    text = re.sub(r'\d+', '', text)
-    return text.strip()
-
-# ==============================
-# Vectorizer
-# ==============================
-def get_vectorizer():
-    return TfidfVectorizer(
-        stop_words='english',
-        ngram_range=(1, 3),
-        max_features=10000,
-        sublinear_tf=True
-    )
-
-# ==============================
 # Routes
 # ==============================
+@app.get("/")
+def home():
+    return {"message": "AI service is running 🚀"}
+
 @app.post("/check")
 def check_duplication(request: ProjectRequest):
 
-    if not request.problem:
+    if not request.problem or not request.projects:
         return {"results": []}
 
-    user_text = clean_text(request.problem)
+    # 🔥 النصوص
+    texts = [p.description for p in request.projects]
+    texts.append(request.problem)
 
-    # ✅ فلترة الداتا
-    valid_projects = [
-        p for p in request.projects
-        if p.description and p.description.strip() != ""
-    ]
+    # 🔥 embeddings
+    embeddings = model.encode(texts)
 
-    if not valid_projects:
-        return {"results": []}
+    project_vecs = embeddings[:-1]
+    user_vec = embeddings[-1].reshape(1, -1)
 
-    project_texts = [
-        clean_text(p.description) for p in valid_projects
-    ]
-
-    # 🔥 أهم fix
-    all_texts = project_texts + [user_text]
-
-    vectorizer = get_vectorizer()
-    matrix = vectorizer.fit_transform(all_texts)
-
-    project_matrix = matrix[:-1]
-    user_vec = matrix[-1]
-
-    similarities = cosine_similarity(user_vec, project_matrix)[0]
-
-    sorted_indices = np.argsort(similarities)[::-1]
+    # 🔥 similarity
+    similarities = cosine_similarity(user_vec, project_vecs)[0]
 
     results = []
 
-    for idx in sorted_indices:
-        score = float(similarities[idx])
-
-        if score < 0.05:
+    for i, score in enumerate(similarities):
+        if score < 0.2:  # فلترة بسيطة
             continue
 
         results.append({
-            "id": valid_projects[idx].id,
-            "similarity": round(score * 100, 2)
+            "id": request.projects[i].id,
+            "similarity": round(float(score * 100), 2)
         })
+
+    # ترتيب
+    results.sort(key=lambda x: x["similarity"], reverse=True)
 
     return {
         "results": results
