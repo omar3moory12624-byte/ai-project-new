@@ -10,8 +10,7 @@ app = FastAPI(title="Graduation Project AI API")
 # ==============================
 # Model (خفيف وسريع)
 # ==============================
-model = SentenceTransformer("paraphrase-MiniLM-L3-v2")
-
+model = SentenceTransformer("all-mpnet-base-v2")
 # ==============================
 # Models
 # ==============================
